@@ -14,7 +14,10 @@ use std::fs::File;
 use std::io::prelude::*;
 use text_io::read;
 
-const self_name: &str = "twohumansentertainment";
+// TODO: make this more portable for other people?
+//       maybe do a first time setup and store this and the messages.json location
+//       in a config file next to it or something like that
+const SELF_NAME: &str = "twohumansentertainment";
 
 fn main() {
     println!("Old Instagram Archived Messages Browser version 2");
@@ -30,19 +33,15 @@ fn main() {
     let mut contents = String::new();
     file.read_to_string(&mut contents)
         .expect("Failed to read messages.json! Make sure it's next to the program and you have read-access.");
-        
     println!("* deserializing messages into memory ...");
     let archive: Vec<Thread> = serde_json::from_str(&contents).unwrap();
     println!("* loaded {} threads ...", archive.len());
 
     let mut current_thread = 0;
 
-    let mut ui: String;
     loop {
         // Prompt
-        print!("> ");
-        let _ = std::io::stdout().flush();
-        ui = read!("{}\n");
+        let ui = prompt("> ".to_string());
         if ui.len() == 1 {
             continue;
         }
@@ -56,7 +55,10 @@ fn main() {
                 // List all threads
                 for i in 0..archive.len() {
                     if archive[i].participants.len() == 1 {
-                        println!("    thread {} with just yourself", i.to_string().blue());
+                        println!(
+                            "    thread {} with just yourself",
+                            i.to_string().blue().bold()
+                        );
                         continue;
                     }
                     let mut s_parts = archive[i].participants.clone();
@@ -64,32 +66,40 @@ fn main() {
                         archive[i]
                             .participants
                             .iter()
-                            .position(|x| *x == self_name)
+                            .position(|x| *x == SELF_NAME)
                             .unwrap(),
                     );
                     if s_parts.len() == 1 {
-                        println!(
-                            "    thread {} with {}",
-                            i.to_string().blue(),
-                            s_parts[0].blue()
-                        );
+                        if i == current_thread {
+                            println!(
+                                ">>> thread {} with {}",
+                                i.to_string().blue().bold(),
+                                s_parts[0].blue().bold()
+                            );
+                        } else {
+                            println!(
+                                "    thread {} with {}",
+                                i.to_string().blue().bold(),
+                                s_parts[0].blue().bold()
+                            );
+                        }
                         continue;
                     }
                     if i == current_thread {
                         println!(
                             ">>> thread {} with {} people including {}, {} ",
-                            i.to_string().blue(),
+                            i.to_string().blue().bold(),
                             archive[i].participants.len(),
-                            &s_parts[0].blue(),
-                            &s_parts[1].blue()
+                            &s_parts[0].blue().bold(),
+                            &s_parts[1].blue().bold()
                         );
                     } else {
                         println!(
                             "    thread {} with {} people including {}, {} ",
-                            i.to_string().blue(),
+                            i.to_string().blue().bold(),
                             archive[i].participants.len(),
-                            &s_parts[0].blue(),
-                            &s_parts[1].blue()
+                            &s_parts[0].blue().bold(),
+                            &s_parts[1].blue().bold()
                         );
                     }
                 }
@@ -296,14 +306,14 @@ fn main() {
                                 println!(
                                     "{}: {} named it '{}'",
                                     timestamp,
-                                    parts[0].blue(),
+                                    parts[0].blue().bold(),
                                     parts[1]
                                 );
                             } else {
                                 println!(
                                     "{}: {} ({}) named it '{}'",
                                     timestamp,
-                                    parts[0].blue(),
+                                    parts[0].blue().bold(),
                                     c[i].sender.yellow(),
                                     parts[1]
                                 );
@@ -371,18 +381,22 @@ fn main() {
                 println!("Exited message mode.");
             }
             "h" => {
+                // Display help text
                 help_text();
             }
             "q" => {
+                // Exit program
                 break;
             }
             _ => {
+                // I have no idea.
                 println!("?");
             }
         }
     }
 }
 
+/// Message browse console
 fn message_browse(thread: &Thread, thread_id: usize) {
     let tlen = thread.conversation.len() - 1; // We use this to fix the reversed indexing
 
@@ -394,7 +408,6 @@ fn message_browse(thread: &Thread, thread_id: usize) {
     let mut auto_forward = true; // Move forwards on empty
     let mut rev_auto_forward = true; // Actually move backwards if false
 
-    let mut ui: String; // User input field
     loop {
         if auto_print {
             println!("{}\n", thread.conversation[tlen - current_message]);
@@ -402,9 +415,7 @@ fn message_browse(thread: &Thread, thread_id: usize) {
             auto_print = true; // Reset this once we've done it.
         }
         // Prompt
-        print!("[{}, {}]> ", thread_id, current_message);
-        let _ = std::io::stdout().flush();
-        ui = read!("{}\n");
+        let ui = prompt(format!("[{}, {}]> ", thread_id, current_message));
 
         // Auto advancing of messages either way
         if ui.len() < 2 {
@@ -422,7 +433,7 @@ fn message_browse(thread: &Thread, thread_id: usize) {
                     if current_message > 0 {
                         current_message -= 1;
                     } else {
-                        println!("(reached end)");
+                        println!("(reached start)");
                         auto_print = false;
                     }
                 }
@@ -433,6 +444,8 @@ fn message_browse(thread: &Thread, thread_id: usize) {
         // Split command line into separated bits
         let bits = ui.split_whitespace().collect::<Vec<&str>>();
         if bits.len() == 0 {
+            // just a space... so do nothing
+            auto_print = false;
             continue;
         }
         match bits[0] {
@@ -450,7 +463,7 @@ fn message_browse(thread: &Thread, thread_id: usize) {
                 if current_message > 0 {
                     current_message -= 1;
                 } else {
-                    println!("(reached beginning)");
+                    println!("(reached start)");
                     auto_print = false;
                 }
             }
@@ -477,10 +490,10 @@ fn message_browse(thread: &Thread, thread_id: usize) {
             "raf" => {
                 // toggle rev-auto-forward
                 println!(
-                    "Toggled reversed auto-forward to {}",
-                    match auto_forward {
-                        true => "on", // lol
-                        false => "off",
+                    "Toggled auto-forward direction to {}",
+                    match rev_auto_forward {
+                        true => "reversed",
+                        false => "forwards",
                     }
                 );
                 rev_auto_forward = !rev_auto_forward;
@@ -589,19 +602,21 @@ fn message_browse(thread: &Thread, thread_id: usize) {
                             .to_lowercase()
                             .contains(&needle.to_lowercase())
                         {
-                            //add_mark(thread_id, i);
-
                             // generate highlighted string
                             // oh no i probably need to clone the message don't I oh well
                             // not today
+                            // TODO: highlight needle in find output
+
                             /*
                             let m = thread.conversation[i];
                             m.text = Some("".to_string());
                             for part in m.text.unwrap().to_lowercase().split(&needle.to_lowercase()) {
                                 m.text.unwrap().push_str(part);
                                 m.text.unwrap().push_str(&needle.red());
+                                // ???
                             }
                             */
+
                             // print it
                             println!(
                                 "  {} {}",
@@ -674,6 +689,15 @@ fn message_browse(thread: &Thread, thread_id: usize) {
     }
 }
 
+/// Prompt user for input
+fn prompt(s: String) -> String {
+    print!("{}", s);
+    let _ = std::io::stdout().flush();
+    let ui = read!("{}\n");
+    ui
+}
+
+/// Display help/info text.
 fn help_text() {
     // Oh gosh
     println!("Help text!");
@@ -687,7 +711,6 @@ fn help_text() {
     println!(" * ams: advanced message stats // produces a leaderboard of # messages sent sorted by message count");
     println!(" * ams-mot: messages over time // 'ams-mot i' where i is interval (d, m, y); outputs message count at that interval");
     println!(" * ams-dt: message delta-time // calculates the shortest and longest time between messages in the thread");
-    println!();
     println!(" * m!: switch to the message-mode console, which lets you look at messages and perform per-message ops.");
     println!();
     println!("Message-mode commands: ");
@@ -704,6 +727,7 @@ fn help_text() {
     println!(" * q: quit message mode, return to normal console");
 }
 
+/// Message type formatter
 impl fmt::Display for Message {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // Premake the sender, so it can be a pleasant blue colour
@@ -791,12 +815,20 @@ impl fmt::Display for Message {
 }
 
 impl Message {
+    /// Print likes of message
     fn print_likes(&self) {
         match &self.likes {
             Some(likes) => {
-                println!("Has {} likes:", self.likes.as_ref().unwrap().len());
+                println!(
+                    "Has {} likes:",
+                    self.likes.as_ref().unwrap().len().to_string().red()
+                );
                 for like in likes {
-                    println!("... {} on {}", like.username, like.date);
+                    println!(
+                        "... {} on {}",
+                        like.username.blue().bold(),
+                        like.date.strip_suffix("+00:00").unwrap_or("err").green()
+                    );
                 }
             }
             None => {
@@ -804,6 +836,8 @@ impl Message {
             }
         }
     }
+
+    /// Generate NativeDateTime from the created_at field.
     fn to_ndt(&self) -> NaiveDateTime {
         NaiveDateTime::parse_from_str(&self.created_at, "%Y-%m-%dT%H:%M:%S%.6f+00:00").unwrap()
     }
