@@ -17,7 +17,11 @@ Normal mode commands:
  * ams: advanced message stats // produces a leaderboard of # messages sent sorted by message count
  * ams-mot: messages over time // 'ams-mot i' where i is interval (d, m, y); outputs message count at that interval
  * ams-dt: message delta-time // calculates the shortest and longest time between messages in the thread
- * m!: switch to the message-mode console, which lets you look at messages and perform per-message ops. (see below)
+ * gf: global find, same as find but for all threads at once // 'gf blah blah'
+ * gfu: global find by user: same as the above but for user // 'gfu username'
+ * m!: switch to the message-mode console, which lets you look at messages and perform per-message ops.
+ * fts: perform first time setup again.
+ * q: quit
 
 Message-mode commands:
  * (. = +): next message
@@ -37,7 +41,8 @@ Message-mode commands:
  - It outputs nice colo(u)red text and tables and things, so you might want to use the new fancy Windows Terminal or something that supports color and maybe unicode
  - It probably works on Linux, I haven't bothered to check. It definitely works on Windows, though, probably.
  
- 
- 
+ First time setup:
+    The first time you run the program, it will ask for the location of messages.json, as well as your username. It uses the username to exclude you from 
+    thread participant lists, so it needs it to be correct. The FTS information is stored in a file called ia_settings.json, in the same folder as the program.
  
  
