@@ -14,11 +14,6 @@ use std::fs::File;
 use std::io::prelude::*;
 use text_io::read;
 
-// TODO: make this more portable for other people?
-//       maybe do a first time setup and store this and the messages.json location
-//       in a config file next to it or something like that
-const SELF_NAME: &str = "twohumansentertainment";
-
 fn main() {
     println!("Old Instagram Archived Messages Browser version 2");
 
@@ -27,12 +22,25 @@ fn main() {
     })
     .expect("failed to set ctrl-c handler..??!!"); // this should never happen
 
+    println!("* loading ia_settings.json");
+
+    let app_settings = AppSettings::try_load();
+    let messages_path = app_settings.message_file_path;
+    let self_username = app_settings.self_username;
+
     println!("* loading messages.json ...");
-    let mut file = File::open("messages.json")
-        .expect("Failed to open messages.json! Make sure it's next to the program.");
+    if !std::path::Path::new(&messages_path).exists() {
+        println!(
+            "* ERR: can't find messages.json at path '{}'",
+            messages_path
+        );
+        AppSettings::first_time_setup();
+        return;
+    }
+    let mut file = File::open(messages_path).expect("Failed to open message file path!");
     let mut contents = String::new();
     file.read_to_string(&mut contents)
-        .expect("Failed to read messages.json! Make sure it's next to the program and you have read-access.");
+        .expect("Failed to read messages.json! Make sure you have read-access.");
     println!("* deserializing messages into memory ...");
     let archive: Vec<Thread> = serde_json::from_str(&contents).unwrap();
     println!("* loaded {} threads ...", archive.len());
@@ -66,8 +74,8 @@ fn main() {
                         archive[i]
                             .participants
                             .iter()
-                            .position(|x| *x == SELF_NAME)
-                            .unwrap(),
+                            .position(|x| *x == self_username)
+                            .expect("Your own username did not appear. Run 'fts' for first time setup."),
                     );
                     if s_parts.len() == 1 {
                         if i == current_thread {
@@ -374,11 +382,87 @@ fn main() {
                 );
             }
             */
+            "gf" => {
+                // Global find
+                let mut needle = String::new();
+                if bits.len() == 1 {
+                    println!("syntax: 'gf blah blah ...'");
+                    continue;
+                } else {
+                    for i in 0..bits.len() {
+                        if i == 0 {
+                            continue;
+                        }
+                        if i > 1 {
+                            needle.push(' ');
+                        }
+                        needle.push_str(bits[i]);
+                    }
+                }
+
+                if needle.len() < 3 {
+                    println!("Needle too short.. you probably don't want to do that.");
+                    continue;
+                }
+                let mut found = 0;
+                for (ti, thread) in archive.iter().enumerate() {
+                    for i in (0..thread.conversation.len()).rev() {
+                        if thread.conversation[i].text.is_some() {
+                            if thread.conversation[i]
+                                .text
+                                .as_ref()
+                                .unwrap()
+                                .to_lowercase()
+                                .contains(&needle.to_lowercase())
+                            {
+                                // print it
+                                println!(
+                                    "  {} {}",
+                                    format!("[{}, {}]:", ti, thread.conversation.len() - i)
+                                        .yellow(),
+                                    thread.conversation[i]
+                                );
+                                found += 1;
+                            }
+                        }
+                    }
+                }
+                println!("Found '{}' {} times.", needle, found);
+            }
+            "gfu" => {
+                // global find user
+                if bits.len() != 2 {
+                    println!("syntax: 'gfu username'");
+                    continue;
+                }
+                let username = bits[1];
+
+                let mut found = 0;
+                for (ti, thread) in archive.iter().enumerate() {
+                    if !thread.participants.contains(&username.to_string()) {
+                        continue;
+                    }
+                    for i in (0..thread.conversation.len()).rev() {
+                        if thread.conversation[i].sender == username {
+                            println!(
+                                "  {} {}",
+                                format!("[{}, {}]:", ti, thread.conversation.len() - i).yellow(),
+                                thread.conversation[i]
+                            );
+                            found += 1;
+                        }
+                    }
+                }
+                println!("Found {} messages sent by {}.", found, username);
+            }
             "m!" => {
                 // Enter MESSAGE MODE (! indicates mode change)
                 println!("Entering message mode for thread {} ...", current_thread);
                 message_browse(&archive[current_thread], current_thread);
                 println!("Exited message mode.");
+            }
+            "fts" => {
+                AppSettings::first_time_setup();
             }
             "h" => {
                 // Display help text
@@ -602,21 +686,6 @@ fn message_browse(thread: &Thread, thread_id: usize) {
                             .to_lowercase()
                             .contains(&needle.to_lowercase())
                         {
-                            // generate highlighted string
-                            // oh no i probably need to clone the message don't I oh well
-                            // not today
-                            // TODO: highlight needle in find output
-
-                            /*
-                            let m = thread.conversation[i];
-                            m.text = Some("".to_string());
-                            for part in m.text.unwrap().to_lowercase().split(&needle.to_lowercase()) {
-                                m.text.unwrap().push_str(part);
-                                m.text.unwrap().push_str(&needle.red());
-                                // ???
-                            }
-                            */
-
                             // print it
                             println!(
                                 "  {} {}",
@@ -670,11 +739,11 @@ fn message_browse(thread: &Thread, thread_id: usize) {
                 match n {
                     Ok(n) => {
                         // check if it's within scope
-                        if n > 0 && n < thread.conversation.len() {
+                        if n >= 0 && n < thread.conversation.len() {
                             current_message = n;
                         } else {
                             println!(
-                                "message id must be > 0 and < total conversation length (here {})",
+                                "message id must be >= 0 and < total conversation length (here {})",
                                 thread.conversation.len()
                             );
                         }
@@ -693,7 +762,7 @@ fn message_browse(thread: &Thread, thread_id: usize) {
 fn prompt(s: String) -> String {
     print!("{}", s);
     let _ = std::io::stdout().flush();
-    let ui = read!("{}\n");
+    let ui: String = read!("{}\n");
     ui
 }
 
@@ -711,7 +780,11 @@ fn help_text() {
     println!(" * ams: advanced message stats // produces a leaderboard of # messages sent sorted by message count");
     println!(" * ams-mot: messages over time // 'ams-mot i' where i is interval (d, m, y); outputs message count at that interval");
     println!(" * ams-dt: message delta-time // calculates the shortest and longest time between messages in the thread");
+    println!(" * gf: global find, same as find but for all threads at once // 'gf blah blah'");
+    println!(" * gfu: global find by user: same as the above but for user // 'gfu username'");
     println!(" * m!: switch to the message-mode console, which lets you look at messages and perform per-message ops.");
+    println!(" * fts: perform first time setup again.");
+    println!(" * q: quit");
     println!();
     println!("Message-mode commands: ");
     println!(" * (. = +): next message");
@@ -877,4 +950,61 @@ struct Archive {
 struct Like {
     username: String, // Username who liked it
     date: String,     // Timestamp of like (?)
+}
+
+impl AppSettings {
+    fn try_load() -> Self {
+        if std::path::Path::new("ia_settings.json").exists() {
+            let mut file =
+                File::open("ia_settings.json").expect("Failed to open ia_settings.json!");
+            let mut contents = String::new();
+            file.read_to_string(&mut contents)
+                .expect("Failed to read ia_settings.json! Make sure it's next to the program and you have read-access.");
+            let settings: AppSettings = serde_json::from_str(&contents).unwrap();
+            settings
+        } else {
+            // first time setup
+            Self::first_time_setup()
+        }
+    }
+    fn first_time_setup() -> Self {
+        println!("First time setup.");
+        println!("messages.json file path:");
+        let mut message_file_path_input = prompt("  *> ".to_string());
+        if message_file_path_input.ends_with('\r') {
+            message_file_path_input.pop();
+            if message_file_path_input.ends_with('\n') {
+                message_file_path_input.pop();
+            }
+        }
+
+        let message_file_path = std::path::PathBuf::from(message_file_path_input)
+            .to_string_lossy()
+            .to_string();
+        println!("Your own username:");
+        let mut self_username = prompt("  *> ".to_string());
+        if self_username.ends_with('\r') {
+            self_username.pop();
+            if self_username.ends_with('\n') {
+                self_username.pop();
+            }
+        }
+        let r = Self {
+            message_file_path,
+            self_username,
+        };
+
+        let mut file =
+            File::create("ia_settings.json").expect("failed to open ia_settings.json ...");
+        let content = serde_json::to_string(&r).unwrap();
+        file.write_all(&content.as_ref())
+            .expect("failed to write ia_settings.json!! do you have write perms?!");
+        r
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct AppSettings {
+    message_file_path: String,
+    self_username: String,
 }
