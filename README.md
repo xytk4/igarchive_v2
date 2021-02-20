@@ -1,6 +1,15 @@
 # igarchive_v2
 Old Instagram Message Browser/Console nonsense
 
+*2021 Update*
+
+Lol guess what - as soon as I made this, Instagram et al decided to completely change the data dump
+format for messages (and everything else it looks like.) So this no longer works unless you're lucky
+enough to have json files from... probably November 2020 at the latest. (ps. the new format is worse
+in almost every way. i'm not making a parser for it. i'll probably make an api client instead... shh)
+
+----
+
 Get a messages.json from the Instagram data dump zip you can get in your account page somewhere...
 Then this will turn it into a browsable console you can... browse through.
 Also do stuff like text search, statistics, that sort of thing.
